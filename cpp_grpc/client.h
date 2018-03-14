@@ -55,7 +55,7 @@ class Client {
                             typename RpcHandlerType::OutgoingType>::value,
                     channel_) {}
 
-  bool Read(typename RpcHandlerType::ResponseType *response) {
+  bool StreamRead(typename RpcHandlerType::ResponseType *response) {
     switch (rpc_method_.method_type()) {
       case ::grpc::internal::RpcMethod::BIDI_STREAMING:
         InstantiateClientReaderWriterIfNeeded();
@@ -64,7 +64,8 @@ class Client {
         CHECK(client_reader_);
         return client_reader_->Read(response);
       default:
-        LOG(FATAL) << "Not implemented.";
+        LOG(FATAL)
+            << "This method is for server or bidirectional streaming RPC only.";
     }
   }
 
@@ -75,7 +76,7 @@ class Client {
         std::bind(&Client<RpcHandlerType>::Reset, this));
   }
 
-  bool WritesDone() {
+  bool StreamWritesDone() {
     switch (rpc_method_.method_type()) {
       case ::grpc::internal::RpcMethod::CLIENT_STREAMING:
         InstantiateClientWriterIfNeeded();
@@ -84,11 +85,12 @@ class Client {
         InstantiateClientReaderWriterIfNeeded();
         return client_reader_writer_->WritesDone();
       default:
-        LOG(FATAL) << "Not implemented.";
+        LOG(FATAL)
+            << "This method is for client or bidirectional streaming RPC only.";
     }
   }
 
-  ::grpc::Status Finish() {
+  ::grpc::Status StreamFinish() {
     switch (rpc_method_.method_type()) {
       case ::grpc::internal::RpcMethod::CLIENT_STREAMING:
         InstantiateClientWriterIfNeeded();
@@ -100,7 +102,7 @@ class Client {
         CHECK(client_reader_);
         return client_reader_->Finish();
       default:
-        LOG(FATAL) << "Not implemented.";
+        LOG(FATAL) << "This method is for streaming RPC only.";
     }
   }
 

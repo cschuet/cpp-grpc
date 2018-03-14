@@ -27,7 +27,6 @@
 #include "grpc++/grpc++.h"
 #include "gtest/gtest.h"
 
-
 namespace cpp_grpc {
 namespace {
 
@@ -175,8 +174,8 @@ TEST_F(ServerTest, ProcessRpcStreamTest) {
     request.set_input(i);
     EXPECT_TRUE(client.Write(request));
   }
-  EXPECT_TRUE(client.WritesDone());
-  EXPECT_TRUE(client.Finish().ok());
+  EXPECT_TRUE(client.StreamWritesDone());
+  EXPECT_TRUE(client.StreamFinish().ok());
   EXPECT_EQ(client.response().output(), 33);
 
   server_->Shutdown();
@@ -203,15 +202,15 @@ TEST_F(ServerTest, ProcessBidiStreamingRpcTest) {
     request.set_input(i);
     EXPECT_TRUE(client.Write(request));
   }
-  client.WritesDone();
+  client.StreamWritesDone();
   proto::GetSumResponse response;
   std::list<int> expected_responses = {0, 0, 1, 1, 3, 3};
-  while (client.Read(&response)) {
+  while (client.StreamRead(&response)) {
     EXPECT_EQ(expected_responses.front(), response.output());
     expected_responses.pop_front();
   }
   EXPECT_TRUE(expected_responses.empty());
-  EXPECT_TRUE(client.Finish().ok());
+  EXPECT_TRUE(client.StreamFinish().ok());
 
   server_->Shutdown();
 }
@@ -249,11 +248,11 @@ TEST_F(ServerTest, ProcessServerStreamingRpcTest) {
   client.Write(request);
   proto::GetSequenceResponse response;
   for (int i = 0; i < 12; ++i) {
-    EXPECT_TRUE(client.Read(&response));
+    EXPECT_TRUE(client.StreamRead(&response));
     EXPECT_EQ(response.output(), i);
   }
-  EXPECT_FALSE(client.Read(&response));
-  EXPECT_TRUE(client.Finish().ok());
+  EXPECT_FALSE(client.StreamRead(&response));
+  EXPECT_TRUE(client.StreamFinish().ok());
 
   server_->Shutdown();
 }
