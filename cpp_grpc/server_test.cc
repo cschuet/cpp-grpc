@@ -41,9 +41,10 @@ class MathServerContext : public ExecutionContext {
 class GetSumHandler
     : public RpcHandler<Stream<proto::GetSumRequest>, proto::GetSumResponse> {
  public:
-  std::string method_name() const override {
+  static constexpr const char* MethodName() {
     return "/cpp_grpc.proto.Math/GetSum";
   }
+
   void OnRequest(const proto::GetSumRequest& request) override {
     sum_ += GetContext<MathServerContext>()->additional_increment();
     sum_ += request.input();
@@ -62,9 +63,10 @@ class GetSumHandler
 class GetRunningSumHandler : public RpcHandler<Stream<proto::GetSumRequest>,
                                                Stream<proto::GetSumResponse>> {
  public:
-  std::string method_name() const override {
+  static const char* MethodName() {
     return "/cpp_grpc.proto.Math/GetRunningSum";
   }
+
   void OnRequest(const proto::GetSumRequest& request) override {
     sum_ += request.input();
 
@@ -86,12 +88,15 @@ class GetRunningSumHandler : public RpcHandler<Stream<proto::GetSumRequest>,
 class GetSquareHandler
     : public RpcHandler<proto::GetSquareRequest, proto::GetSquareResponse> {
  public:
-  std::string method_name() const override {
+  static const char* MethodName() {
+    std::cout << "methodname\n";
     return "/cpp_grpc.proto.Math/GetSquare";
   }
+
   void OnRequest(const proto::GetSquareRequest& request) override {
     auto response = common::make_unique<proto::GetSquareResponse>();
     response->set_output(request.input() * request.input());
+    std::cout << "on request: " << request.input() << std::endl;
     Send(std::move(response));
   }
 };
@@ -99,9 +104,8 @@ class GetSquareHandler
 class GetEchoHandler
     : public RpcHandler<proto::GetEchoRequest, proto::GetEchoResponse> {
  public:
-  std::string method_name() const override {
-    return "/cpp_grpc.proto.Math/GetEcho";
-  }
+  static const char* MethodName() { return "/cpp_grpc.proto.Math/GetEcho"; }
+
   void OnRequest(const proto::GetEchoRequest& request) override {
     int value = request.input();
     Writer writer = GetWriter();
@@ -118,9 +122,10 @@ class GetSequenceHandler
     : public RpcHandler<proto::GetSequenceRequest,
                         Stream<proto::GetSequenceResponse>> {
  public:
-  std::string method_name() const override {
+  static constexpr const char* MethodName() {
     return "/cpp_grpc.proto.Math/GetSequence";
   }
+
   void OnRequest(const proto::GetSequenceRequest& request) override {
     for (int i = 0; i < request.input(); ++i) {
       auto response = common::make_unique<proto::GetSequenceResponse>();

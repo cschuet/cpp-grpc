@@ -23,12 +23,12 @@
 #include <string>
 #include <thread>
 
+#include "cpp_grpc/common/make_unique.h"
 #include "cpp_grpc/completion_queue_thread.h"
 #include "cpp_grpc/event_queue_thread.h"
 #include "cpp_grpc/execution_context.h"
 #include "cpp_grpc/rpc_handler.h"
 #include "cpp_grpc/service.h"
-#include "cpp_grpc/common/make_unique.h"
 #include "grpc++/grpc++.h"
 
 namespace cpp_grpc {
@@ -56,8 +56,7 @@ class Server {
 
     template <typename RpcHandlerType>
     void RegisterHandler() {
-      std::string method_full_name =
-          RpcHandlerInterface::Instantiate<RpcHandlerType>()->method_name();
+      std::string method_full_name = RpcHandlerType::MethodName();
       std::string service_full_name;
       std::string method_name;
       std::tie(service_full_name, method_name) =
