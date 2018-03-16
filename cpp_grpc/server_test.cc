@@ -38,13 +38,16 @@ class MathServerContext : public ExecutionContext {
   std::promise<EchoResponder> echo_responder;
 };
 
-class GetSumHandler
-    : public RpcHandler<Stream<proto::GetSumRequest>, proto::GetSumResponse> {
- public:
+struct GetSumMethod {
   static constexpr const char* MethodName() {
     return "/cpp_grpc.proto.Math/GetSum";
   }
+  using IncomingType = Stream<proto::GetSumRequest>;
+  using OutgoingType = proto::GetSumResponse;
+};
 
+class GetSumHandler : public RpcHandler<GetSumMethod> {
+ public:
   void OnRequest(const proto::GetSumRequest& request) override {
     sum_ += GetContext<MathServerContext>()->additional_increment();
     sum_ += request.input();
@@ -60,13 +63,16 @@ class GetSumHandler
   int sum_ = 0;
 };
 
-class GetRunningSumHandler : public RpcHandler<Stream<proto::GetSumRequest>,
-                                               Stream<proto::GetSumResponse>> {
- public:
-  static const char* MethodName() {
+struct GetRunningSumMethod {
+  static constexpr const char* MethodName() {
     return "/cpp_grpc.proto.Math/GetRunningSum";
   }
+  using IncomingType = Stream<proto::GetSumRequest>;
+  using OutgoingType = Stream<proto::GetSumResponse>;
+};
 
+class GetRunningSumHandler : public RpcHandler<GetRunningSumMethod> {
+ public:
   void OnRequest(const proto::GetSumRequest& request) override {
     sum_ += request.input();
 
@@ -85,14 +91,16 @@ class GetRunningSumHandler : public RpcHandler<Stream<proto::GetSumRequest>,
   int sum_ = 0;
 };
 
-class GetSquareHandler
-    : public RpcHandler<proto::GetSquareRequest, proto::GetSquareResponse> {
- public:
-  static const char* MethodName() {
-    std::cout << "methodname\n";
+struct GetSquareMethod {
+  static constexpr const char* MethodName() {
     return "/cpp_grpc.proto.Math/GetSquare";
   }
+  using IncomingType = proto::GetSquareRequest;
+  using OutgoingType = proto::GetSquareResponse;
+};
 
+class GetSquareHandler : public RpcHandler<GetSquareMethod> {
+ public:
   void OnRequest(const proto::GetSquareRequest& request) override {
     auto response = common::make_unique<proto::GetSquareResponse>();
     response->set_output(request.input() * request.input());
@@ -101,11 +109,16 @@ class GetSquareHandler
   }
 };
 
-class GetEchoHandler
-    : public RpcHandler<proto::GetEchoRequest, proto::GetEchoResponse> {
- public:
-  static const char* MethodName() { return "/cpp_grpc.proto.Math/GetEcho"; }
+struct GetEchoMethod {
+  static constexpr const char* MethodName() {
+    return "/cpp_grpc.proto.Math/GetEcho";
+  }
+  using IncomingType = proto::GetEchoRequest;
+  using OutgoingType = proto::GetEchoResponse;
+};
 
+class GetEchoHandler : public RpcHandler<GetEchoMethod> {
+ public:
   void OnRequest(const proto::GetEchoRequest& request) override {
     int value = request.input();
     Writer writer = GetWriter();
@@ -118,14 +131,16 @@ class GetEchoHandler
   }
 };
 
-class GetSequenceHandler
-    : public RpcHandler<proto::GetSequenceRequest,
-                        Stream<proto::GetSequenceResponse>> {
- public:
+struct GetSequenceMethod {
   static constexpr const char* MethodName() {
     return "/cpp_grpc.proto.Math/GetSequence";
   }
+  using IncomingType = proto::GetSequenceRequest;
+  using OutgoingType = Stream<proto::GetSequenceResponse>;
+};
 
+class GetSequenceHandler : public RpcHandler<GetSequenceMethod> {
+ public:
   void OnRequest(const proto::GetSequenceRequest& request) override {
     for (int i = 0; i < request.input(); ++i) {
       auto response = common::make_unique<proto::GetSequenceResponse>();
@@ -173,7 +188,7 @@ TEST_F(ServerTest, ProcessRpcStreamTest) {
   server_->SetExecutionContext(common::make_unique<MathServerContext>());
   server_->Start();
 
-  Client<GetSumHandler> client(client_channel_);
+  Client<GetSumMethod> client(client_channel_);
   for (int i = 0; i < 3; ++i) {
     proto::GetSumRequest request;
     request.set_input(i);
@@ -189,7 +204,7 @@ TEST_F(ServerTest, ProcessRpcStreamTest) {
 TEST_F(ServerTest, ProcessUnaryRpcTest) {
   server_->Start();
 
-  Client<GetSquareHandler> client(client_channel_);
+  Client<GetSquareMethod> client(client_channel_);
   proto::GetSquareRequest request;
   request.set_input(11);
   EXPECT_TRUE(client.Write(request));
@@ -201,7 +216,7 @@ TEST_F(ServerTest, ProcessUnaryRpcTest) {
 TEST_F(ServerTest, ProcessBidiStreamingRpcTest) {
   server_->Start();
 
-  Client<GetRunningSumHandler> client(client_channel_);
+  Client<GetRunningSumMethod> client(client_channel_);
   for (int i = 0; i < 3; ++i) {
     proto::GetSumRequest request;
     request.set_input(i);
@@ -233,7 +248,7 @@ TEST_F(ServerTest, WriteFromOtherThread) {
     CHECK(responder());
   });
 
-  Client<GetEchoHandler> client(client_channel_);
+  Client<GetEchoMethod> client(client_channel_);
   proto::GetEchoRequest request;
   request.set_input(13);
   EXPECT_TRUE(client.Write(request));
@@ -246,7 +261,7 @@ TEST_F(ServerTest, WriteFromOtherThread) {
 TEST_F(ServerTest, ProcessServerStreamingRpcTest) {
   server_->Start();
 
-  Client<GetSequenceHandler> client(client_channel_);
+  Client<GetSequenceMethod> client(client_channel_);
   proto::GetSequenceRequest request;
   request.set_input(12);
 
