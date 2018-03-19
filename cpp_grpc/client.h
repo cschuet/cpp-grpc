@@ -19,25 +19,28 @@
 
 #include "cpp_grpc/retry.h"
 #include "cpp_grpc/rpc_handler_interface.h"
-#include "cpp_grpc/type_traits.h"
-#include "glog/logging.h"
+#include "cpp_grpc/rpc_service_method_traits.h"
+
 #include "grpc++/grpc++.h"
 #include "grpc++/impl/codegen/client_unary_call.h"
+#include "grpc++/impl/codegen/proto_utils.h"
 #include "grpc++/impl/codegen/sync_stream.h"
 
-namespace cpp_grpc {
+#include "glog/logging.h"
 
-template <typename RpcHandlerType>
+namespace cpp_grpc {
+template <typename RpcServiceMethodConcept>
 class Client {
+  using RpcServiceMethod = RpcServiceMethodTraits<RpcServiceMethodConcept>;
+  using RequestType = typename RpcServiceMethod::RequestType;
+  using ResponseType = typename RpcServiceMethod::ResponseType;
+
  public:
   Client(std::shared_ptr<::grpc::Channel> channel, RetryStrategy retry_strategy)
       : channel_(channel),
         client_context_(common::make_unique<::grpc::ClientContext>()),
-        rpc_method_name_(
-            RpcHandlerInterface::Instantiate<RpcHandlerType>()->method_name()),
-        rpc_method_(rpc_method_name_.c_str(),
-                    RpcType<typename RpcHandlerType::IncomingType,
-                            typename RpcHandlerType::OutgoingType>::value,
+        rpc_method_name_(RpcServiceMethod::MethodName()),
+        rpc_method_(rpc_method_name_.c_str(), RpcServiceMethod::StreamType,
                     channel_),
         retry_strategy_(retry_strategy) {
     CHECK(!retry_strategy ||
@@ -48,14 +51,11 @@ class Client {
   Client(std::shared_ptr<::grpc::Channel> channel)
       : channel_(channel),
         client_context_(common::make_unique<::grpc::ClientContext>()),
-        rpc_method_name_(
-            RpcHandlerInterface::Instantiate<RpcHandlerType>()->method_name()),
-        rpc_method_(rpc_method_name_.c_str(),
-                    RpcType<typename RpcHandlerType::IncomingType,
-                            typename RpcHandlerType::OutgoingType>::value,
+        rpc_method_name_(RpcServiceMethod::MethodName()),
+        rpc_method_(rpc_method_name_.c_str(), RpcServiceMethod::StreamType,
                     channel_) {}
 
-  bool Read(typename RpcHandlerType::ResponseType *response) {
+  bool StreamRead(ResponseType *response) {
     switch (rpc_method_.method_type()) {
       case ::grpc::internal::RpcMethod::BIDI_STREAMING:
         InstantiateClientReaderWriterIfNeeded();
@@ -64,18 +64,18 @@ class Client {
         CHECK(client_reader_);
         return client_reader_->Read(response);
       default:
-        LOG(FATAL) << "Not implemented.";
+        LOG(FATAL) << "This method is for server or bidirectional streaming "
+                      "RPC only.";
     }
   }
 
-  bool Write(const typename RpcHandlerType::RequestType &request) {
-    return RetryWithStrategy(
-        retry_strategy_,
-        std::bind(&Client<RpcHandlerType>::WriteImpl, this, request),
-        std::bind(&Client<RpcHandlerType>::Reset, this));
+  bool Write(const RequestType &request) {
+    return RetryWithStrategy(retry_strategy_,
+                             [this, &request] { return WriteImpl(request); },
+                             [this] { Reset(); });
   }
 
-  bool WritesDone() {
+  bool StreamWritesDone() {
     switch (rpc_method_.method_type()) {
       case ::grpc::internal::RpcMethod::CLIENT_STREAMING:
         InstantiateClientWriterIfNeeded();
@@ -84,11 +84,12 @@ class Client {
         InstantiateClientReaderWriterIfNeeded();
         return client_reader_writer_->WritesDone();
       default:
-        LOG(FATAL) << "Not implemented.";
+        LOG(FATAL) << "This method is for client or bidirectional streaming "
+                      "RPC only.";
     }
   }
 
-  ::grpc::Status Finish() {
+  ::grpc::Status StreamFinish() {
     switch (rpc_method_.method_type()) {
       case ::grpc::internal::RpcMethod::CLIENT_STREAMING:
         InstantiateClientWriterIfNeeded();
@@ -100,11 +101,11 @@ class Client {
         CHECK(client_reader_);
         return client_reader_->Finish();
       default:
-        LOG(FATAL) << "Not implemented.";
+        LOG(FATAL) << "This method is for streaming RPC only.";
     }
   }
 
-  const typename RpcHandlerType::ResponseType &response() {
+  const ResponseType &response() {
     CHECK(rpc_method_.method_type() ==
               ::grpc::internal::RpcMethod::NORMAL_RPC ||
           rpc_method_.method_type() ==
@@ -117,7 +118,7 @@ class Client {
     client_context_ = common::make_unique<::grpc::ClientContext>();
   }
 
-  bool WriteImpl(const typename RpcHandlerType::RequestType &request) {
+  bool WriteImpl(const RequestType &request) {
     switch (rpc_method_.method_type()) {
       case ::grpc::internal::RpcMethod::NORMAL_RPC:
         return MakeBlockingUnaryCall(request, &response_).ok();
@@ -139,10 +140,8 @@ class Client {
              ::grpc::internal::RpcMethod::CLIENT_STREAMING);
     if (!client_writer_) {
       client_writer_.reset(
-          ::grpc::internal::
-              ClientWriterFactory<typename RpcHandlerType::RequestType>::Create(
-                  channel_.get(), rpc_method_, client_context_.get(),
-                  &response_));
+          ::grpc::internal::ClientWriterFactory<RequestType>::Create(
+              channel_.get(), rpc_method_, client_context_.get(), &response_));
     }
   }
 
@@ -152,27 +151,21 @@ class Client {
     if (!client_reader_writer_) {
       client_reader_writer_.reset(
           ::grpc::internal::ClientReaderWriterFactory<
-              typename RpcHandlerType::RequestType,
-              typename RpcHandlerType::ResponseType>::Create(channel_.get(),
-                                                             rpc_method_,
-                                                             client_context_
-                                                                 .get()));
+              RequestType, ResponseType>::Create(channel_.get(), rpc_method_,
+                                                 client_context_.get()));
     }
   }
 
-  void InstantiateClientReader(
-      const typename RpcHandlerType::RequestType &request) {
+  void InstantiateClientReader(const RequestType &request) {
     CHECK_EQ(rpc_method_.method_type(),
              ::grpc::internal::RpcMethod::SERVER_STREAMING);
     client_reader_.reset(
-        ::grpc::internal::
-            ClientReaderFactory<typename RpcHandlerType::ResponseType>::Create(
-                channel_.get(), rpc_method_, client_context_.get(), request));
+        ::grpc::internal::ClientReaderFactory<ResponseType>::Create(
+            channel_.get(), rpc_method_, client_context_.get(), request));
   }
 
-  ::grpc::Status MakeBlockingUnaryCall(
-      const typename RpcHandlerType::RequestType &request,
-      typename RpcHandlerType::ResponseType *response) {
+  ::grpc::Status MakeBlockingUnaryCall(const RequestType &request,
+                                       ResponseType *response) {
     CHECK_EQ(rpc_method_.method_type(),
              ::grpc::internal::RpcMethod::NORMAL_RPC);
     return ::grpc::internal::BlockingUnaryCall(
@@ -184,15 +177,11 @@ class Client {
   const std::string rpc_method_name_;
   const ::grpc::internal::RpcMethod rpc_method_;
 
-  std::unique_ptr<::grpc::ClientWriter<typename RpcHandlerType::RequestType>>
-      client_writer_;
-  std::unique_ptr<
-      ::grpc::ClientReaderWriter<typename RpcHandlerType::RequestType,
-                                 typename RpcHandlerType::ResponseType>>
+  std::unique_ptr<::grpc::ClientWriter<RequestType>> client_writer_;
+  std::unique_ptr<::grpc::ClientReaderWriter<RequestType, ResponseType>>
       client_reader_writer_;
-  std::unique_ptr<::grpc::ClientReader<typename RpcHandlerType::ResponseType>>
-      client_reader_;
-  typename RpcHandlerType::ResponseType response_;
+  std::unique_ptr<::grpc::ClientReader<ResponseType>> client_reader_;
+  ResponseType response_;
   RetryStrategy retry_strategy_;
 };
 

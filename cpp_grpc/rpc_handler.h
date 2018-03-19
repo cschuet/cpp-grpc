@@ -20,20 +20,22 @@
 #include "cpp_grpc/execution_context.h"
 #include "cpp_grpc/rpc.h"
 #include "cpp_grpc/rpc_handler_interface.h"
-#include "cpp_grpc/type_traits.h"
-#include "glog/logging.h"
+#include "cpp_grpc/rpc_service_method_traits.h"
+
 #include "google/protobuf/message.h"
+
+#include "glog/logging.h"
+
 #include "grpc++/grpc++.h"
 
 namespace cpp_grpc {
 
-template <typename Incoming, typename Outgoing>
+template <typename RpcServiceMethodConcept>
 class RpcHandler : public RpcHandlerInterface {
  public:
-  using IncomingType = Incoming;
-  using OutgoingType = Outgoing;
-  using RequestType = StripStream<Incoming>;
-  using ResponseType = StripStream<Outgoing>;
+  using RpcServiceMethod = RpcServiceMethodTraits<RpcServiceMethodConcept>;
+  using RequestType = typename RpcServiceMethod::RequestType;
+  using ResponseType = typename RpcServiceMethod::ResponseType;
 
   class Writer {
    public:
