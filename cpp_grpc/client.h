@@ -23,6 +23,7 @@
 
 #include "grpc++/grpc++.h"
 #include "grpc++/impl/codegen/client_unary_call.h"
+#include "grpc++/impl/codegen/proto_utils.h"
 #include "grpc++/impl/codegen/sync_stream.h"
 
 #include "glog/logging.h"
